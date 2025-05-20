@@ -55,11 +55,31 @@ export function searchMovies(query: string, page = 1) {
 /**
  * Get movie recommendations for a given movie ID
  * @param movieId TMDB movie ID
+ * @param page Page number (default 1)
  */
 export function getMovieRecommendations(movieId: number, page = 1) {
   return api.get(`/movie/${movieId}/recommendations`, {
-    params: { language: 'en-US', page },
+    params: {
+      language: 'en-US',
+      page,
+    },
   });
+}
+
+/**
+ * Get Watch Providers for a given movie ID in a specific region
+ * @param movieId TMDB movie ID
+ * @param region ISO 3166-1 country code (default 'US')
+ */
+export function getWatchProviders(
+  movieId: number,
+  region: string = 'MX'
+) {
+  return api.get(`/movie/${movieId}/watch/providers`)
+    .then(res => {
+      // devuelve sólo los datos de la región solicitada
+      return res.data.results[region] || {};
+    });
 }
 
 export default api;
