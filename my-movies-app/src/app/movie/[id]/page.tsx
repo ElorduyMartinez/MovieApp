@@ -1,190 +1,140 @@
-"use client";
-import { useEffect, useState } from "react";
-import { IMovieDetail } from "@/types/MovieDetail";
+'use client';
+import React, { useEffect, useState } from "react";
+import { useRouter, useParams } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
+import { ArrowLeft, Heart, HeartCrack } from "lucide-react";
+import { IMovieDetail } from "@/types/MovieDetail";
 import { getMovieById } from "@/services/movies/getMovieById";
 import { markAsFavorite } from "@/services/accounts/markAsFavorite";
 import { useGuestSession } from "@/providers/GuestSessionContext";
-import { useParams } from "next/navigation";
 import Config from "@/config";
 import RecommendedMovies from "@/components/RecommendedMovies/RecommendedMovies";
 
-const MovieDetailPage = () => {
+const MovieDetailPage: React.FC = () => {
+  const router = useRouter();
   const { id } = useParams();
-  const [movie, setMovie] = useState<IMovieDetail | undefined>(undefined);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [movie, setMovie] = useState<IMovieDetail | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isFavorite, setIsFavorite] = useState<boolean>(false);
+  const [isFavorite, setIsFavorite] = useState(false);
   const { guestSessionId } = useGuestSession();
 
-  // Cargar detalles de la película
   useEffect(() => {
-    if (!id || typeof id !== "string") return;
-    
-    const fetchMovie = async (): Promise<void> => {
-      setLoading(true);
-      try {
-        const data = await getMovieById(id);
-        setMovie(data);
-      } catch (err) {
-        console.error("Error fetching movie", err);
-        setError("Could not load movie.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchMovie();
+    if (!id || Array.isArray(id)) return;
+    setLoading(true);
+    getMovieById(id)
+      .then((data) => setMovie(data))
+      .catch(() => setError("Failed to load movie."))
+      .finally(() => setLoading(false));
   }, [id]);
 
-  // Verificar si está en favoritos (localStorage)
   useEffect(() => {
-    if (!id || typeof id !== "string") return;
-    const storedFavorites = localStorage.getItem("favoriteMovieIds");
-    const favoriteIds: number[] = storedFavorites
-      ? JSON.parse(storedFavorites)
-      : [];
-    setIsFavorite(favoriteIds.includes(Number(id)));
+    if (!id) return;
+    const stored = JSON.parse(localStorage.getItem("favoriteMovieIds") || "[]");
+    setIsFavorite(stored.includes(Number(id)));
   }, [id]);
 
-  // Marcar o desmarcar como favorito
-  const handleToggleFavorite = async (): Promise<void> => {
-    if (!guestSessionId || !movie) return;
-    const newFavoriteState = !isFavorite;
+  const toggleFavorite = async () => {
+    if (!movie || !guestSessionId) return;
+    const nextState = !isFavorite;
     try {
-      await markAsFavorite(movie.id, newFavoriteState, guestSessionId);
-      setIsFavorite(newFavoriteState);
-      const storedFavorites = localStorage.getItem("favoriteMovieIds");
-      const favoriteIds: number[] = storedFavorites
-        ? JSON.parse(storedFavorites)
-        : [];
-      const updatedFavorites = newFavoriteState
-        ? [...new Set([...favoriteIds, movie.id])]
-        : favoriteIds.filter((id) => id !== movie.id);
-      localStorage.setItem(
-        "favoriteMovieIds",
-        JSON.stringify(updatedFavorites)
-      );
-    } catch (error) {
-      console.error("Failed to update favorite:", error);
+      await markAsFavorite(movie.id, nextState, guestSessionId);
+      setIsFavorite(nextState);
+      const stored = JSON.parse(localStorage.getItem("favoriteMovieIds") || "[]");
+      const updated = nextState
+        ? [...new Set([...stored, movie.id])]
+        : stored.filter((mid: number) => mid !== movie.id);
+      localStorage.setItem("favoriteMovieIds", JSON.stringify(updated));
+    } catch {
+      console.error("Favorite toggle failed");
     }
   };
 
-  if (loading) return <div>Loading movie...</div>;
-  if (error) return <div>{error}</div>;
-  if (!movie) return <div>No movie found.</div>;
+  if (loading) return <div className="flex items-center justify-center h-screen"><div className="animate-spin h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full" /></div>;
+  if (error || !movie) return (
+    <div className="container mx-auto p-6 text-center text-red-600">
+      {error || "Movie not found."}
+      <button onClick={() => router.back()} className="mt-4 inline-flex items-center text-blue-600 hover:underline">
+        <ArrowLeft className="mr-1" /> Go Back
+      </button>
+    </div>
+  );
 
-  // Formatear la fecha de lanzamiento
   const releaseDate = new Date(movie.release_date).toLocaleDateString();
-  
-  // Formatear el presupuesto y los ingresos
-  const formatMoney = (amount: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  const formatMoney = (amt: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amt);
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="flex flex-col md:flex-row gap-8">
-        {/* Poster */}
-        <div className="flex-shrink-0 w-full md:w-80">
+    <div className="bg-gray-50">
+      <div className="relative h-96">
         <Image
-        src={`${Config.IMAGE_SOURCE}${movie.poster_path}`}
-        alt={movie.title}
-        className="rounded-lg w-full object-cover"
-        width={400}
-        height={600}
-        unoptimized
-          />
-        </div>
-        
-        {/* Content */}
-        <div className="flex-grow">
-          <h1 className="text-4xl font-bold mb-2">{movie.title}</h1>
-          
-          {movie.tagline && (
-            <p className="text-lg italic text-gray-500 mb-4">"{movie.tagline}"</p>
-          )}
-          
-          <p className="text-lg mb-8">{movie.overview}</p>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
-            {/* Details Column */}
-            <div>
-              <h2 className="text-2xl font-semibold mb-4">Details</h2>
-              <div className="space-y-3">
-                <div>
-                  <span className="font-medium">Release Date:</span> {releaseDate}
-                </div>
-                <div>
-                  <span className="font-medium">RunTime:</span> {movie.runtime} minutes
-                </div>
-                <div>
-                  <span className="font-medium">Genres:</span> {movie.genres.map(genre => genre.name).join(', ')}
-                </div>
-                <div>
-                  <span className="font-medium">Original Language:</span> {movie.spoken_languages.map(lang => lang.english_name).join(', ')}
-                </div>
-                <div>
-                  <span className="font-medium">Status:</span> {movie.status}
-                </div>
-              </div>
-            </div>
-            
-            {/* Production Column */}
-            <div>
-              <h2 className="text-2xl font-semibold mb-4">Production</h2>
-              <div className="space-y-3">
-                {movie.budget > 0 && (
-                  <div>
-                    <span className="font-medium">Budget:</span> {formatMoney(movie.budget)}
-                  </div>
-                )}
-                {movie.revenue > 0 && (
-                  <div>
-                    <span className="font-medium">Revenue:</span> {formatMoney(movie.revenue)}
-                  </div>
-                )}
-                <div>
-                  <span className="font-medium">Production Companies:</span> {movie.production_companies.map(company => company.name).join(', ')}
-                </div>
-                <div>
-                  <span className="font-medium">Production Countries:</span> {movie.production_countries.map(country => country.name).join(', ')}
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          {/* Rating */}
-          <div className="mt-8 flex items-center">
-            <div className="bg-yellow-500 text-white text-2xl font-bold w-16 h-16 rounded-full flex items-center justify-center mr-4">
-              {movie.vote_average.toFixed(1)}
-            </div>
-            <div>
-              <p className="text-lg">User Rating</p>
-              <p className="text-gray-500">{movie.vote_count} votes</p>
-            </div>
-          </div>
-          
-          {/* Favorite Button */}
-          <button
-            onClick={handleToggleFavorite}
-            className={`mt-6 px-6 py-3 rounded ${
-              isFavorite
-                ? "bg-red-500 hover:bg-red-600"
-                : "bg-yellow-500 hover:bg-yellow-600"
-            } text-white font-bold`}
-          >
-            {isFavorite ? "Remove from Favorites" : "Add to Favorites"}
-          </button>
+          src={`${Config.IMAGE_SOURCE}${movie.backdrop_path || movie.poster_path}`}
+          alt={movie.title}
+          fill
+          className="object-cover brightness-75"
+          unoptimized
+        />
+        <button onClick={() => router.back()} className="absolute top-4 left-4 bg-white bg-opacity-70 rounded-full p-2 hover:bg-opacity-90 transition">
+          <ArrowLeft size={24} />
+        </button>
+        <div className="absolute bottom-6 left-6 text-white">
+          <h1 className="text-4xl font-bold drop-shadow-lg">{movie.title}</h1>
+          {movie.tagline && <p className="italic drop-shadow-md">{movie.tagline}</p>}
         </div>
       </div>
-      {/* Recommended Movies */}
-      <RecommendedMovies movieId={movie.id} />
+
+      <div className="container mx-auto px-6 py-8 space-y-8">
+        <div className="flex flex-col md:flex-row gap-8">
+          <div className="md:w-1/3">
+            <div className="relative h-0 pb-[150%] rounded-lg overflow-hidden shadow-lg">
+              <Image
+                src={`${Config.IMAGE_SOURCE}${movie.poster_path}`}
+                alt={movie.title}
+                fill
+                className="object-cover"
+                unoptimized
+              />
+            </div>
+            <button
+              onClick={toggleFavorite}
+              className="mt-4 w-full inline-flex justify-center items-center gap-2 px-4 py-2 rounded-md text-white font-semibold transition"
+              style={{ backgroundColor: isFavorite ? '#e53e3e' : '#ecc94b' }}
+            >
+              {isFavorite ? <HeartCrack /> : <Heart />} {isFavorite ? 'Remove Favorite' : 'Add Favorite'}
+            </button>
+          </div>
+
+          <div className="md:flex-1 space-y-6">
+            <section>
+              <h2 className="text-2xl font-semibold mb-2">Overview</h2>
+              <p className="text-gray-700 leading-relaxed">{movie.overview}</p>
+            </section>
+
+            <section className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <h3 className="font-semibold">Details</h3>
+                <ul className="text-gray-600 space-y-1">
+                  <li><strong>Release:</strong> {releaseDate}</li>
+                  <li><strong>Runtime:</strong> {movie.runtime} min</li>
+                  <li><strong>Genres:</strong> {movie.genres.map(g => g.name).join(', ')}</li>
+                  <li><strong>Language:</strong> {movie.spoken_languages.map(l => l.english_name).join(', ')}</li>
+                </ul>
+              </div>
+              <div className="space-y-2">
+                <h3 className="font-semibold">Production</h3>
+                <ul className="text-gray-600 space-y-1">
+                  {movie.budget > 0 && <li><strong>Budget:</strong> {formatMoney(movie.budget)}</li>}
+                  {movie.revenue > 0 && <li><strong>Revenue:</strong> {formatMoney(movie.revenue)}</li>}
+                  <li><strong>Companies:</strong> {movie.production_companies.map(c => c.name).join(', ')}</li>
+                  <li><strong>Countries:</strong> {movie.production_countries.map(c => c.name).join(', ')}</li>
+                </ul>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <RecommendedMovies movieId={movie.id} />
+      </div>
     </div>
   );
 };

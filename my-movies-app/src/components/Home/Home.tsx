@@ -2,19 +2,19 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { TrendingUp, Film, Smile, Video, Star, Search } from "lucide-react";
+import { TrendingUp, Film, Smile, Video, Star, Search, ChevronUp } from "lucide-react";
 import { useMoviesData } from "@/hooks/useMoviesData";
 import { useGuestSession } from "@/providers/GuestSessionContext";
 import MovieCarousel from "@/components/MovieCarousel/MovieCarousel";
 import UpcomingMoviesSection from "@/components/UpcomingMoviesSection/UpcomingMoviesSection";
-import { searchMovies } from '@/services/api';
+import { searchMovies, getMovieRecommendations } from '@/services/api';
 
-// Configuración de géneros para mostrar dinámicamente
+// Géneros configurados dinámicamente
 const GENRE_DISPLAY = [
-  { key: "action", title: "Action Movies", icon: <Film className="text-red-500" size={24} /> },
-  { key: "comedy", title: "Comedy Movies", icon: <Smile className="text-yellow-500" size={24} /> },
-  { key: "drama", title: "Drama Movies", icon: <Video className="text-blue-500" size={24} /> },
-  { key: "scifi", title: "Sci-Fi Movies", icon: <Star className="text-indigo-500" size={24} /> },
+  { key: "action", title: "Action", icon: <Film size={20} className="text-red-500" /> },
+  { key: "comedy", title: "Comedy", icon: <Smile size={20} className="text-yellow-500" /> },
+  { key: "drama", title: "Drama", icon: <Video size={20} className="text-blue-500" /> },
+  { key: "scifi", title: "Sci-Fi", icon: <Star size={20} className="text-indigo-500" /> },
 ];
 
 const Home: React.FC = () => {
@@ -31,141 +31,126 @@ const Home: React.FC = () => {
   const { guestSessionId } = useGuestSession();
   const router = useRouter();
 
-  // Search state
+  // Search
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
 
   useEffect(() => {
-    if (!query) {
-      setSearchResults([]);
-      return;
-    }
-    const timeout = setTimeout(async () => {
+    if (!query) return setSearchResults([]);
+    const timer = setTimeout(async () => {
       setSearchLoading(true);
       try {
         const res = await searchMovies(query, 1);
         setSearchResults(res.data.results || []);
-      } catch (err) {
+      } catch {
         setSearchResults([]);
-        console.error('Search error:', err);
       } finally {
         setSearchLoading(false);
       }
     }, 300);
-    return () => clearTimeout(timeout);
+    return () => clearTimeout(timer);
   }, [query]);
 
-
-  const handleSurprise = () => {
-    
-    const allMovies = [
+  // Surprise me with recommendations
+  const handleSurprise = async () => {
+    const all = [
       ...trendingMovies,
       ...upcomingMovies,
-      ...Object.values(genreMovies).flat()
+      ...Object.values(genreMovies).flat(),
+      ...searchResults
     ];
-    if (allMovies.length === 0) return;
-    const random = allMovies[Math.floor(Math.random() * allMovies.length)];
-    router.push(`/movie/${random.id}`);
+    if (!all.length) return;
+    const base = all[Math.floor(Math.random() * all.length)];
+    try {
+      const recs = (await getMovieRecommendations(base.id)).data.results;
+      if (recs.length) {
+        const rec = recs[Math.floor(Math.random() * recs.length)];
+        return router.push(`/movie/${rec.id}`);
+      }
+    } catch {}
+    router.push(`/movie/${base.id}`);
   };
 
-  const handleSelectSuggestion = (id: number) => {
-    setQuery("");
-    setSearchResults([]);
-    router.push(`/movie/${id}`);
-  };
+  if (loading) return (
+    <div className="flex items-center justify-center h-screen">
+      <div className="animate-spin h-16 w-16 border-4 border-blue-500 border-t-transparent rounded-full" />
+    </div>
+  );
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-500"></div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded" role="alert">
-        <strong className="font-bold">Error: </strong>
-        <span>{error}</span>
-      </div>
-    );
-  }
+  if (error) return (
+    <div className="mx-4 mt-8 bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg">
+      <strong>Error:</strong> {error}
+    </div>
+  );
 
   return (
-    <div className="bg-gray-50 text-gray-900 min-h-screen">
-      <div className="container mx-auto px-4 py-8">
-        {/* Favorites, Surprise & Search */}
-        <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center mb-8 gap-4">
-          <div className="flex items-center gap-4">
+    <div className="bg-gradient-to-b from-gray-100 to-white min-h-screen">
+      <header className="bg-white shadow-md">
+        <div className="container mx-auto flex justify-between items-center p-4">
+          <h1 className="text-2xl font-bold text-gray-800">Movie Explorer</h1>
+          <div className="flex items-center space-x-4">
             {guestSessionId && (
-              <Link href="/my-favorites" className="inline-flex items-center text-yellow-600 hover:text-yellow-800 font-semibold">
-                <Star className="mr-1" size={20} /> My Favorites
+              <Link href="/my-favorites" className="flex items-center text-yellow-600 hover:text-yellow-800">
+                <Star className="mr-1" /> Favorites
               </Link>
             )}
-            <button onClick={handleSurprise} className="inline-flex items-center bg-green-500 hover:bg-green-600 text-white font-semibold px-4 py-2 rounded">
-              Surprise Me
+            <button
+              onClick={handleSurprise}
+              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-md flex items-center space-x-1"
+            >
+              <ChevronUp size={18} />
+              <span>Surprise Me</span>
             </button>
           </div>
-          <div className="relative w-full sm:w-1/3">
-            <div className="flex items-center border rounded-lg overflow-hidden shadow-sm">
-              <span className="px-3 text-gray-500"><Search size={20} /></span>
-              <input
-                type="text"
-                placeholder="Search movies..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="py-2 px-3 flex-grow outline-none"
-              />
-            </div>
-            {query && (
-              <ul className="absolute top-full left-0 w-full bg-white border border-gray-200 rounded shadow mt-1 z-10 max-h-60 overflow-auto">
-                {searchLoading ? (
-                  <li className="px-4 py-2 text-gray-500">Loading...</li>
-                ) : searchResults.length > 0 ? (
-                  searchResults.slice(0, 5).map((movie) => (
+        </div>
+      </header>
+
+      <main className="container mx-auto py-8 space-y-12">
+        {/* Search */}
+        <div className="relative max-w-lg mx-auto">
+          <input
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search for movies..."
+            className="w-full border rounded-full py-2 pl-10 pr-4 outline-none shadow-sm focus:ring-2 focus:ring-blue-300"
+          />
+          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          {query && (
+            <ul className="absolute z-20 w-full bg-white border border-gray-200 rounded-lg mt-1 max-h-60 overflow-auto shadow-lg">
+              {searchLoading && <li className="p-2 text-gray-500">Loading...</li>}
+              {!searchLoading && (!searchResults.length
+                ? <li className="p-2 text-gray-500">No results found.</li>
+                : searchResults.slice(0,5).map(m => (
                     <li
-                      key={movie.id}
-                      onClick={() => handleSelectSuggestion(movie.id)}
-                      className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                    >
-                      {movie.title}
-                    </li>
-                  ))
-                ) : (
-                  <li className="px-4 py-2 text-gray-500">No results found</li>
-                )}
-              </ul>
-            )}
-          </div>
+                      key={m.id}
+                      onClick={() => { setQuery(''); setSearchResults([]); router.push(`/movie/${m.id}`)}}
+                      className="p-2 hover:bg-gray-100 cursor-pointer"
+                    >{m.title}</li>
+                  )))}
+            </ul>
+          )}
         </div>
 
-        {/* Content */}
-        {query ? (
-          searchLoading ? (
-            <div className="text-center py-20">Searching…</div>
-          ) : (
-            <MovieCarousel title={`Search results for "${query}"`} movies={searchResults} icon={<Search className="text-green-500" size={24} />} />
-          )
-        ) : (
-          <>
-            <MovieCarousel
-              title="Trending"
-              movies={trendingMovies}
-              icon={<TrendingUp className="text-red-500" size={24} />}
-              filterType="trending"
-              onFilterChange={(f) => setTrendingTimeWindow(f as 'day' | 'week')}
-              currentFilter={trendingTimeWindow}
-            />
+        {/* Trending */}
+        <MovieCarousel
+          title="Trending Now"
+          movies={trendingMovies}
+          icon={<TrendingUp className="text-red-500" size={24} />}
+          filterType="trending"
+          onFilterChange={f => setTrendingTimeWindow(f as 'day'|'week')}
+          currentFilter={trendingTimeWindow}
+        />
 
-            {GENRE_DISPLAY.map(({ key, title, icon }) => (
-              <MovieCarousel key={key} title={title} movies={genreMovies[key] || []} icon={icon} />
-            ))}
+        {/* Genres */}
+        {GENRE_DISPLAY.map(({ key, title, icon }) => (
+          <MovieCarousel key={key} title={title} movies={genreMovies[key]||[]} icon={icon} />
+        ))}
 
-            <UpcomingMoviesSection movies={upcomingMovies} />
-          </>
-        )}
-      </div>
+        {/* Upcoming */}
+        <UpcomingMoviesSection movies={upcomingMovies} />
+      </main>
     </div>
   );
 };
