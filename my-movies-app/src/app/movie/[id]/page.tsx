@@ -92,12 +92,13 @@ const MovieDetailPage = () => {
       <div className="flex flex-col md:flex-row gap-8">
         {/* Poster */}
         <div className="flex-shrink-0 w-full md:w-80">
-          <Image
-            src={`${Config.IMAGE_SOURCE}${movie.poster_path}`}
-            alt={movie.title}
-            className="rounded-lg w-full object-cover"
-            width={400}
-            height={600}
+        <Image
+        src={`${Config.IMAGE_SOURCE}${movie.poster_path}`}
+        alt={movie.title}
+        className="rounded-lg w-full object-cover"
+        width={400}
+        height={600}
+        unoptimized
           />
         </div>
         
